@@ -1,0 +1,55 @@
+---
+networks:
+  dns_net:
+    driver: bridge
+    ipam:
+        config:
+        - subnet: 172.8.0.0/16
+  traefik_scorpion:
+    external: true
+
+services:
+  pihole:
+    container_name: pihole
+    hostname: pihole
+    image: pihole/pihole:latest # remember to change this if you're using rpi
+    networks:
+      dns_net:
+        ipv4_address: 172.8.0.7
+      traefik_scorpion:
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "85:80/tcp"
+    #- "443:443/tcp"
+    environment:
+      TZ: 'America/Detroit'
+      WEBPASSWORD: 'secure_password'
+      PIHOLE_DNS_: '172.8.0.8#5053'
+    volumes:
+      - '/home/docker/pihole/etc-pihole/:/etc/pihole/'
+      - '/home/docker/pihole/etc-dnsmasq.d/:/etc/dnsmasq.d/'
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pihole-secure.entrypoints=websecure"
+      - "traefik.http.routers.pihole-secure.rule=Host(`pihole.$MY_DOMAIN`)"
+      - "traefik.http.routers.pihole-secure.tls=true"
+      - "traefik.http.routers.pihole-secure.service=pihole"
+      - "traefik.http.services.pihole.loadbalancer.server.port=80"
+      - "traefik.http.routers.pihole-secure.middlewares=authentik@file"
+      - "traefik.docker.network=traefik_scorpion"
+  unbound:
+    container_name: unbound
+    image: mvance/unbound:latest # remember to change this if you're using rpi
+    networks:
+      dns_net:
+        ipv4_address: 172.8.0.8
+    volumes:
+      - ./unbound:/etc/unbound
+    ports:
+      - "5053:53/tcp"
+      - "5053:53/udp"
+    healthcheck:
+      test: ["NONE"]
+    restart: unless-stopped
